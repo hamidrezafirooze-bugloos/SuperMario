@@ -268,7 +268,7 @@
 
     <div class="overlay" id="startOverlay">
       <h2>BEARD QUEST</h2>
-      <p>با <b>← →</b> یا <b>A / D</b> حرکت کن، با <b>Space</b> یا <b>↑</b> بپر. روی سر هیولاها بپر تا نابودشون کنی، سکه جمع کن و به پرچم آخر برس!</p>
+      <p>با <b>← →</b> یا <b>A / D</b> حرکت کن، با <b>Space</b> یا <b>↑</b> بپر. روی سر هیولاها بپر تا نابودشون کنی (هیولاهای خاردار نابود نمی‌شن، فقط ازشون رد شو)، سکه و جعبه‌های نیرو جمع کن و به پرچم آخر برس!</p>
       <p id="startBest" style="font-size:12px;color:var(--gold);"></p>
       <button class="btn" id="startBtn">شروع بازی ▶</button>
     </div>
@@ -352,6 +352,7 @@
     bump(){ beep(140,0.08,'square',0.12); },
     hurt(){ beep(220,0.3,'sawtooth',0.16); beep(140,0.35,'sawtooth',0.14,0.05); },
     win(){ [523,659,784,1046].forEach((f,i)=>beep(f,0.22,'square',0.15,i*0.14)); },
+    powerup(){ [660,880,1100].forEach((f,i)=>beep(f,0.12,'square',0.15,i*0.06)); },
     gameClear(){ [523,659,784,1046,1318,1046,1318,1568].forEach((f,i)=>beep(f,0.24,'square',0.16,i*0.13)); },
     dead(){ [392,349,330,294,262].forEach((f,i)=>beep(f,0.25,'triangle',0.16,i*0.16)); }
   };
@@ -484,7 +485,7 @@
       {x:2080,w:70,h:64}, {x:3660,w:70,h:64}
     ]);
     const blocks = mapBlocks([
-      {x:520,y:170,type:'question',used:false},
+      {x:520,y:170,type:'power-question',used:false},
       {x:1420,y:170,type:'brick'},
       {x:1452,y:170,type:'question',used:false},
       {x:1484,y:170,type:'brick'},
@@ -524,7 +525,7 @@
       {x:3300,w:70,h:64}, {x:3900,w:70,h:64}
     ]);
     const blocks = mapBlocks([
-      {x:450,y:170,type:'question',used:false},
+      {x:450,y:170,type:'power-question',used:false},
       {x:800,y:170,type:'brick'},
       {x:832,y:170,type:'question',used:false},
       {x:864,y:170,type:'brick'},
@@ -574,7 +575,7 @@
     pipes = def.pipes; blocks = def.blocks; stairs = def.stairs;
     coins = def.coins; enemies = def.enemies; flag = def.flag;
     clouds = def.clouds; hills = def.hills; bushes = def.bushes;
-    camX = 0; particles = []; flyCoins = [];
+    camX = 0; particles = []; flyCoins = []; powerups = [];
     resetPlayer();
     document.getElementById('hud-world').textContent = '1-' + (idx+1);
     document.getElementById('hud-world-eyebrow').textContent = 'WORLD 1 · ' + (idx+1);
@@ -582,7 +583,7 @@
 
   // ---------- player ----------
   const GRAVITY = 0.62, MAX_FALL = 15, MOVE_ACCEL = 0.55, MAX_SPEED = 4.4, FRICTION = 0.72, JUMP_V = -12.4, JUMP_CUT = 0.5;
-  const player = { x:60, y:0, w:26, h:34, vx:0, vy:0, onGround:false, dir:1, anim:0, alive:true, invuln:0, sliding:false };
+  const player = { x:60, y:0, w:26, h:34, vx:0, vy:0, onGround:false, dir:1, anim:0, alive:true, invuln:0, sliding:false, shield:false };
 
   let camX = 0;
   let score = 0, coinCount = 0, lives = 3;
@@ -591,9 +592,25 @@
   let awaitingNextLevel = false;
   let particles = [];
   let flyCoins = [];
+  let powerups = [];
 
   function resetPlayer(){
-    player.x = 60; player.y = GROUND_Y - player.h - 1; player.vx=0; player.vy=0; player.onGround=false; player.invuln=90; player.alive=true;
+    player.x = 60; player.y = GROUND_Y - player.h - 1; player.vx=0; player.vy=0; player.onGround=false; player.invuln=90; player.alive=true; player.shield=false;
+  }
+  function spawnPowerup(x,y){
+    powerups.push({x, y:y-4, w:22, h:22, vx:1.2, vy:-3, taken:false});
+  }
+  function updatePowerups(dt){
+    for(const p of powerups){
+      if(p.taken) continue;
+      p.vy += 0.4*dt;
+      if(p.vy > 4) p.vy = 4;
+      p.y += p.vy*dt;
+      p.x += p.vx*dt;
+      if(p.y > GROUND_Y - p.h){ p.y = GROUND_Y - p.h; p.vy = 0; }
+      if(p.x > LEVEL_W - p.w){ p.x = LEVEL_W - p.w; p.vx *= -1; }
+      if(p.x < 0){ p.x = 0; p.vx *= -1; }
+    }
   }
   loadLevel(0);
   document.getElementById('startBest').textContent = bestScore>0 ? ('بهترین امتیاز: ' + bestScore) : '';
@@ -653,7 +670,7 @@
           // hit head on block from below
           player.y = s.y + s.h;
           player.vy = 0.5;
-          if(s.type==='question' || s.type==='brick'){
+          if(s.type==='question' || s.type==='brick' || s.type==='power-question'){
             bumpBlock(s);
           }
         }
@@ -696,6 +713,17 @@
       }
     }
 
+    // power-ups
+    for(const p of powerups){
+      if(!p.taken && aabb(player, p)){
+        p.taken = true;
+        player.shield = true;
+        sfx.powerup();
+        announce('نیرو گرفتی! یک ضربه اضافه تحمل می‌کنی.');
+        spawnParticles(p.x+p.w/2, p.y, '#ffd34d');
+      }
+    }
+
     // flag
     if(state==='playing' && player.x + player.w >= flag.x){
       state = 'sliding';
@@ -720,6 +748,10 @@
       score += 100;
       flyCoins.push({x:b.x+8, y:b.y, t:0});
       sfx.coin();
+    } else if(b.type==='power-question' && !b.used){
+      b.used = true;
+      spawnPowerup(b.x+5, b.y);
+      sfx.powerup();
     } else {
       sfx.bump();
     }
@@ -739,6 +771,13 @@
   }
 
   function hurtPlayer(){
+    if(player.shield){
+      player.shield = false;
+      player.invuln = 80;
+      sfx.bump();
+      announce('محافظ تو رو نجات داد.');
+      return;
+    }
     lives -= 1;
     sfx.hurt();
     announce('یک جان از دست دادی. جان باقیمانده: ' + Math.max(0,lives));
@@ -896,7 +935,7 @@
     const x = b.x-camX;
     if(x+b.w<0||x>W) return;
     const y = b.y - (b.bump>0 ? Math.min(6,b.bump) : 0);
-    if(b.type==='question' && !b.used){
+    if((b.type==='question' || b.type==='power-question') && !b.used){
       ctx.fillStyle = '#f0a830';
       ctx.fillRect(x,y,b.w,b.h);
       ctx.strokeStyle = '#8a4a20'; ctx.lineWidth=2;
@@ -905,7 +944,7 @@
       ctx.font = "16px 'Press Start 2P'";
       ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText('?', x+b.w/2, y+b.h/2+2);
-    } else if(b.type==='question' && b.used){
+    } else if((b.type==='question' || b.type==='power-question') && b.used){
       ctx.fillStyle = '#9a5a30';
       ctx.fillRect(x,y,b.w,b.h);
       ctx.strokeStyle = '#5a3010'; ctx.lineWidth=2;
@@ -934,6 +973,22 @@
     ctx.fillStyle = '#ffd34d';
     ctx.beginPath(); ctx.arc(0,0,c.w/2,0,Math.PI*2); ctx.fill();
     ctx.strokeStyle = '#b8860b'; ctx.lineWidth=2; ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawPowerup(p){
+    if(p.taken) return;
+    const x = p.x-camX;
+    if(x+p.w<0||x>W) return;
+    ctx.save();
+    ctx.translate(x+p.w/2, p.y+p.h/2);
+    ctx.fillStyle = '#ff5a5f';
+    ctx.beginPath(); ctx.ellipse(0,-2,11,8,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-5,-4,2.2,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(5,-4,2.2,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#e3ad7d';
+    ctx.fillRect(-6,4,12,8);
     ctx.restore();
   }
 
@@ -996,6 +1051,14 @@
     ctx.save();
     ctx.translate(x+w/2, y+h/2+bob);
     ctx.scale(dir,1);
+
+    if(player.shield){
+      ctx.save();
+      ctx.globalAlpha = 0.3 + Math.sin(performance.now()/120)*0.08;
+      ctx.fillStyle = '#ffd34d';
+      ctx.beginPath(); ctx.ellipse(0,-2,18,23,0,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
 
     const skin = '#e3ad7d';
     const skinShade = '#c98f5f';
@@ -1132,6 +1195,7 @@
     for(const s of stairs) drawStair(s);
     drawFlag();
     for(const c of coins) drawCoin(c);
+    for(const p of powerups) drawPowerup(p);
     for(const en of enemies) drawEnemy(en);
     drawHero();
 
@@ -1183,6 +1247,7 @@
       updateEnemies(dt);
       updateBlocks(dt);
       updateParticles(dt);
+      updatePowerups(dt);
     }
     draw();
     updateHud();
