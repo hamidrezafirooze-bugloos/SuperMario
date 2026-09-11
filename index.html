@@ -151,6 +151,44 @@
   .btn:hover{transform:translateY(-2px);}
   .btn:active{transform:translateY(2px);box-shadow:0 2px 0 #b8860b;}
 
+  .score-submit{
+    display:flex;
+    gap:8px;
+    align-items:center;
+  }
+  .score-submit input{
+    font-family:'Vazirmatn',system-ui,sans-serif;
+    font-size:14px;
+    padding:10px 12px;
+    border-radius:6px;
+    border:none;
+    width:160px;
+    direction:rtl;
+    text-align:center;
+  }
+  .score-submit .btn{
+    padding:10px 16px;
+    font-size:11px;
+  }
+  .leaderboard{
+    width:min(320px,90vw);
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    max-height:180px;
+    overflow-y:auto;
+  }
+  .lb-row{
+    display:flex;
+    justify-content:space-between;
+    font-size:13px;
+    color:var(--ink);
+    background:rgba(255,255,255,.06);
+    border-radius:4px;
+    padding:4px 10px;
+    direction:rtl;
+  }
+
   .below{
     display:flex;
     justify-content:space-between;
@@ -245,12 +283,22 @@
     <div class="overlay" id="loseOverlay" hidden>
       <h2>GAME OVER</h2>
       <p id="loseScore"></p>
+      <div class="score-submit">
+        <input type="text" id="loseNameInput" maxlength="20" placeholder="اسمت رو بنویس">
+        <button class="btn" id="loseSubmitBtn">ثبت امتیاز</button>
+      </div>
+      <div class="leaderboard" id="loseLeaderboard"></div>
       <button class="btn" id="retryBtn">تلاش دوباره ↺</button>
     </div>
 
     <div class="overlay" id="winOverlay" hidden>
       <h2>مرحله تمام شد! 🏁</h2>
       <p id="winScore"></p>
+      <div class="score-submit">
+        <input type="text" id="winNameInput" maxlength="20" placeholder="اسمت رو بنویس">
+        <button class="btn" id="winSubmitBtn">ثبت امتیاز</button>
+      </div>
+      <div class="leaderboard" id="winLeaderboard"></div>
       <button class="btn" id="againBtn">دوباره بازی کن ↺</button>
     </div>
   </div>
@@ -271,6 +319,7 @@
 
 <footer>ساخته‌شده با HTML5 Canvas — کاراکتر الهام‌گرفته از تصویر ارسالی</footer>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (function(){
   "use strict";
@@ -418,6 +467,41 @@
   for(let i=0;i<10;i++) hills.push({x:i*420+Math.random()*80, s:0.8+Math.random()*0.6});
   const bushes = [];
   for(let i=0;i<16;i++) bushes.push({x:Math.random()*LEVEL_W, s:0.8+Math.random()*0.7});
+
+  // ---------- highscores (Supabase) ----------
+  const SUPABASE_URL = '__SUPABASE_URL__';
+  const SUPABASE_ANON_KEY = '__SUPABASE_ANON_KEY__';
+  const supaClient = (window.supabase && !SUPABASE_URL.startsWith('__'))
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  async function submitHighscore(name, points){
+    if(!supaClient) return;
+    const cleanName = (name||'').trim().slice(0,20) || 'ناشناس';
+    try{
+      const { error } = await supaClient.from('highscores').insert({ player_name: cleanName, score: points });
+      if(error) throw error;
+    }catch(e){ console.error('submitHighscore failed', e); }
+  }
+
+  async function renderLeaderboard(container){
+    if(!supaClient || !container) return;
+    try{
+      const { data, error } = await supaClient
+        .from('highscores')
+        .select('player_name, score')
+        .order('score', { ascending:false })
+        .limit(10);
+      if(error) throw error;
+      container.innerHTML = (data||[]).map((row,i)=>
+        `<div class="lb-row"><span>${i+1}. ${escapeHtml(row.player_name)}</span><span>${row.score}</span></div>`
+      ).join('') || '<div class="lb-row">هنوز امتیازی ثبت نشده</div>';
+    }catch(e){ console.error('renderLeaderboard failed', e); }
+  }
 
   // ---------- player ----------
   const GRAVITY = 0.62, MAX_FALL = 15, MOVE_ACCEL = 0.55, MAX_SPEED = 4.4, FRICTION = 0.72, JUMP_V = -12.4, JUMP_CUT = 0.5;
@@ -601,6 +685,7 @@
         state = 'dead';
         document.getElementById('loseScore').textContent = 'امتیاز نهایی: ' + score;
         document.getElementById('loseOverlay').hidden = false;
+        renderLeaderboard(document.getElementById('loseLeaderboard'));
       }
     }, 700);
   }
@@ -609,6 +694,7 @@
     state = 'win';
     document.getElementById('winScore').textContent = 'امتیاز: ' + score + '  |  سکه: ' + coinCount;
     document.getElementById('winOverlay').hidden = false;
+    renderLeaderboard(document.getElementById('winLeaderboard'));
   }
 
   function updateEnemies(dt){
@@ -1001,6 +1087,15 @@
   document.getElementById('startBtn').addEventListener('click', startGame);
   document.getElementById('retryBtn').addEventListener('click', startGame);
   document.getElementById('againBtn').addEventListener('click', startGame);
+
+  document.getElementById('loseSubmitBtn').addEventListener('click', async ()=>{
+    await submitHighscore(document.getElementById('loseNameInput').value, score);
+    renderLeaderboard(document.getElementById('loseLeaderboard'));
+  });
+  document.getElementById('winSubmitBtn').addEventListener('click', async ()=>{
+    await submitHighscore(document.getElementById('winNameInput').value, score);
+    renderLeaderboard(document.getElementById('winLeaderboard'));
+  });
 
   updateHud();
   draw();
