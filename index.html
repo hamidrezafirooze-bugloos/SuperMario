@@ -100,6 +100,7 @@
     border:3px solid var(--bezel);
     box-shadow:0 0 0 2px #4a51a0;
     background:var(--sky);
+    touch-action:none;
   }
   canvas{
     display:block;
@@ -224,7 +225,51 @@
     color:#5a5f8a;
     direction:rtl;
   }
+
+  #rotateOverlay{
+    position:fixed;
+    inset:0;
+    z-index:9999;
+    background:var(--bezel);
+    color:var(--ink);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:16px;
+    text-align:center;
+    padding:24px;
+  }
+  #rotateOverlay[hidden]{display:none;}
+  #rotateOverlay .icon{
+    font-size:54px;
+    animation:rotatePhone 1.6s ease-in-out infinite;
+  }
+  @keyframes rotatePhone{
+    0%,100%{transform:rotate(0deg);}
+    50%{transform:rotate(90deg);}
+  }
+  #rotateOverlay .eyebrow{
+    font-family:'Press Start 2P',monospace;
+    font-size:12px;
+    color:var(--gold);
+    letter-spacing:2px;
+  }
+  #rotateOverlay p{
+    margin:0;
+    font-size:15px;
+    color:var(--ink-dim);
+    direction:rtl;
+    max-width:320px;
+    line-height:2;
+  }
 </style>
+
+<div id="rotateOverlay" hidden>
+  <div class="icon">📱</div>
+  <div class="eyebrow">BEARD QUEST</div>
+  <p>این بازی فقط به‌صورت افقی قابل‌بازی است.<br>لطفاً گوشی خود را بچرخانید.</p>
+</div>
 
 <div class="titleblock">
   <div class="eyebrow">WORLD 1 · 1</div>
@@ -241,7 +286,7 @@
     <button class="mute" id="muteBtn">🔊 صدا</button>
   </div>
 
-  <div class="stage">
+  <div class="stage" id="stage">
     <canvas id="game" width="900" height="380"></canvas>
 
     <div class="overlay" id="startOverlay">
@@ -346,6 +391,68 @@
   bindTouch('btnLeft', ()=>keys.left=true, ()=>keys.left=false);
   bindTouch('btnRight', ()=>keys.right=true, ()=>keys.right=false);
   bindTouch('btnJump', ()=>{ if(!keys.jump) jumpBuffered = true; keys.jump = true; }, ()=>keys.jump=false);
+
+  // ---------- mobile touch zones: left/right half of the stage = move, swipe up = jump ----------
+  const stageEl = document.getElementById('stage');
+  const stagePointers = new Map();
+  const SWIPE_JUMP_PX = 32;
+
+  function stageZoneFromX(clientX){
+    const rect = stageEl.getBoundingClientRect();
+    return (clientX - rect.left) < rect.width/2 ? 'left' : 'right';
+  }
+  function recomputeZoneKeys(){
+    let left = false, right = false;
+    for(const st of stagePointers.values()){
+      if(st.zone==='left') left = true;
+      if(st.zone==='right') right = true;
+    }
+    keys.left = left;
+    keys.right = right;
+  }
+  function triggerSwipeJump(){
+    if(!keys.jump) jumpBuffered = true;
+    keys.jump = true;
+    setTimeout(()=>{ keys.jump = false; }, 220);
+  }
+  function releaseStagePointer(e){
+    if(e.pointerType !== 'touch') return;
+    if(stagePointers.delete(e.pointerId)) recomputeZoneKeys();
+  }
+  stageEl.addEventListener('pointerdown', e=>{
+    if(e.pointerType !== 'touch') return;
+    ensureAudio();
+    stagePointers.set(e.pointerId, {zone: stageZoneFromX(e.clientX), startY: e.clientY, jumped:false});
+    recomputeZoneKeys();
+  }, {passive:true});
+  stageEl.addEventListener('pointermove', e=>{
+    if(e.pointerType !== 'touch') return;
+    const st = stagePointers.get(e.pointerId);
+    if(!st || st.jumped) return;
+    if(st.startY - e.clientY > SWIPE_JUMP_PX){
+      st.jumped = true;
+      triggerSwipeJump();
+    }
+  }, {passive:true});
+  stageEl.addEventListener('pointerup', releaseStagePointer);
+  stageEl.addEventListener('pointercancel', releaseStagePointer);
+  stageEl.addEventListener('pointerleave', releaseStagePointer);
+
+  // ---------- landscape lock (phones/touch devices only; desktop is unaffected) ----------
+  const rotateOverlay = document.getElementById('rotateOverlay');
+  function isTouchDevice(){
+    return (window.matchMedia && window.matchMedia('(pointer:coarse)').matches) ||
+      navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+  }
+  let orientationBlocked = false;
+  function updateOrientationGate(){
+    const portrait = window.innerHeight > window.innerWidth;
+    orientationBlocked = isTouchDevice() && portrait;
+    rotateOverlay.hidden = !orientationBlocked;
+  }
+  window.addEventListener('resize', updateOrientationGate);
+  window.addEventListener('orientationchange', updateOrientationGate);
+  updateOrientationGate();
 
   document.getElementById('muteBtn').addEventListener('click', function(){
     muted = !muted;
@@ -986,6 +1093,10 @@
   function loop(t){
     const dt = Math.max(0, Math.min(2.2, (t-lastT)/16.67));
     lastT = t;
+    if(orientationBlocked){
+      requestAnimationFrame(loop);
+      return;
+    }
     if(state==='playing' || state==='sliding'){
       updatePlayer(dt);
       updateEnemies(dt);
