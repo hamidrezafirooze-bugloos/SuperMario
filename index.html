@@ -308,6 +308,7 @@
   <div class="hint">
     <div><kbd>←</kbd><kbd>→</kbd> یا <kbd>A</kbd><kbd>D</kbd> — حرکت</div>
     <div><kbd>Space</kbd> یا <kbd>↑</kbd> — پرش (نگه دار برای پرش بلندتر)</div>
+    <div><kbd>↓</kbd> یا <kbd>S</kbd> — روی لوله وایسا و برو تو</div>
     <div>روی هیولا بپر تا شکستش بدی؛ توی چاله نیفت!</div>
   </div>
   <div class="touch" id="touchControls">
@@ -362,18 +363,21 @@
   };
 
   // ---------- input ----------
-  const keys = { left:false, right:false, jump:false };
+  const keys = { left:false, right:false, jump:false, down:false };
   let jumpBuffered = false;
+  let downBuffered = false;
   window.addEventListener('keydown', e=>{
     if(['ArrowLeft','KeyA'].includes(e.code)) keys.left = true;
     if(['ArrowRight','KeyD'].includes(e.code)) keys.right = true;
     if(['Space','ArrowUp','KeyW'].includes(e.code)){ if(!keys.jump) jumpBuffered = true; keys.jump = true; e.preventDefault(); }
-    if(['ArrowLeft','ArrowRight','ArrowUp','Space'].includes(e.code)) e.preventDefault();
+    if(['ArrowDown','KeyS'].includes(e.code)){ if(!keys.down) downBuffered = true; keys.down = true; e.preventDefault(); }
+    if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code)) e.preventDefault();
   }, {passive:false});
   window.addEventListener('keyup', e=>{
     if(['ArrowLeft','KeyA'].includes(e.code)) keys.left = false;
     if(['ArrowRight','KeyD'].includes(e.code)) keys.right = false;
     if(['Space','ArrowUp','KeyW'].includes(e.code)) keys.jump = false;
+    if(['ArrowDown','KeyS'].includes(e.code)) keys.down = false;
   });
   function bindTouch(id, onDown, onUp){
     const el = document.getElementById(id);
@@ -413,6 +417,9 @@
     {x:340,w:70,h:64}, {x:640,w:70,h:80}, {x:900,w:70,h:96},
     {x:2080,w:70,h:64}, {x:3660,w:70,h:64}
   ].map(p=>({x:p.x,y:GROUND_Y-p.h,w:p.w,h:p.h,type:'pipe'}));
+  // the 2nd pipe drops into the underground coin room; the 3rd pipe is where it lets you back out
+  const pipeEntry = pipes[1];
+  const pipeExitTarget = pipes[2];
 
   const blocks = [
     {x:520,y:170,type:'question',used:false},
@@ -459,6 +466,32 @@
   ].map(e=>({x:e.x, min:e.min, max:e.max, y:GROUND_Y-28, w:30, h:28, dir:-1, speed:1.1, alive:true, squashT:0}));
 
   const flag = {x:3860, y:70, h:GROUND_Y-70};
+
+  // ---------- underground bonus room (reached via the 2nd pipe) ----------
+  const UNDER_LEVEL_W = 1400;
+  const UNDER_CEIL_Y = 46;
+  const underSolids = [
+    {x:0, y:GROUND_Y, w:UNDER_LEVEL_W, h:H-GROUND_Y, type:'ground'},
+    {x:0, y:0, w:UNDER_LEVEL_W, h:UNDER_CEIL_Y, type:'ceiling'},
+  ];
+  const underEntryPipe = {x:80, w:70, h:64};
+  underEntryPipe.y = GROUND_Y - underEntryPipe.h;
+  underEntryPipe.type = 'pipe';
+  const underExitPipe = {x:UNDER_LEVEL_W-180, w:70, h:64};
+  underExitPipe.y = GROUND_Y - underExitPipe.h;
+  underExitPipe.type = 'pipe';
+
+  function buildUnderCoins(){
+    const arr = [];
+    const rows = [GROUND_Y-70, GROUND_Y-110, GROUND_Y-150];
+    let i = 0;
+    for(let x=260; x<UNDER_LEVEL_W-260; x+=40){
+      arr.push({x, y:rows[i%rows.length]});
+      i++;
+    }
+    return arr;
+  }
+  const underCoins = buildUnderCoins().map(c=>({...c, w:18, h:18, taken:false, bob:Math.random()*10}));
 
   // ---------- clouds / hills (parallax) ----------
   const clouds = [];
@@ -512,7 +545,9 @@
 
   let camX = 0;
   let score = 0, coinCount = 0, lives = 3;
-  let state = 'ready'; // ready | playing | dead | win | sliding
+  let state = 'ready'; // ready | playing | dead | win | sliding | transition
+  let world = 'main'; // main | under
+  let transition = null;
   let particles = [];
   let flyCoins = [];
 
@@ -522,14 +557,25 @@
   function resetLevel(){
     blocks.forEach(b=>{b.used=false; b.bump=0;});
     coins.forEach(c=>c.taken=false);
+    underCoins.forEach(c=>c.taken=false);
     enemies.forEach(e=>{e.alive=true; e.dir=-1; e.squashT=0;});
     score=0; coinCount=0; lives=3;
     particles=[]; flyCoins=[];
+    world = 'main';
+    transition = null;
     resetPlayer();
   }
   resetLevel();
 
-  function allSolids(){ return solidsFromGround().concat(pipes, blocks, stairs); }
+  function allSolids(){
+    if(world==='under') return underSolids.concat([underEntryPipe, underExitPipe]);
+    return solidsFromGround().concat(pipes, blocks, stairs);
+  }
+  function currentLevelWidth(){ return world==='under' ? UNDER_LEVEL_W : LEVEL_W; }
+  function currentCoins(){ return world==='under' ? underCoins : coins; }
+  function overlapsPipeTop(p, pipe){
+    return p.x+p.w > pipe.x+8 && p.x < pipe.x+pipe.w-8 && Math.abs((p.y+p.h)-pipe.y) < 6;
+  }
 
   function aabb(a,b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
 
@@ -559,7 +605,7 @@
 
     // move X
     player.x += player.vx*dt;
-    player.x = Math.max(0, Math.min(LEVEL_W - player.w, player.x));
+    player.x = Math.max(0, Math.min(currentLevelWidth() - player.w, player.x));
     for(const s of solids){
       if(aabb(player,s)){
         if(player.vx > 0) player.x = s.x - player.w;
@@ -597,38 +643,52 @@
       return;
     }
 
+    // enter/exit pipes with Down while standing on top of them
+    if(downBuffered){
+      downBuffered = false;
+      if(world==='main' && player.onGround && overlapsPipeTop(player, pipeEntry)){
+        startTransition(pipeEntry, ()=>{ world='under'; emergeFromPipe(underEntryPipe); });
+        return;
+      } else if(world==='under' && player.onGround && overlapsPipeTop(player, underExitPipe)){
+        startTransition(underExitPipe, ()=>{ world='main'; emergeFromPipe(pipeExitTarget); });
+        return;
+      }
+    }
+
     if(player.invuln>0) player.invuln -= dt;
 
     // animation
     if(Math.abs(player.vx) > 0.3 && player.onGround){ player.anim += dt*0.28; } else if(player.onGround){ player.anim = 0; }
 
-    camX = Math.max(0, Math.min(LEVEL_W - W, player.x - W/2 + player.w/2));
+    camX = Math.max(0, Math.min(currentLevelWidth() - W, player.x - W/2 + player.w/2));
 
     // enemy collisions
-    for(const en of enemies){
-      if(!en.alive) continue;
-      if(aabb(player, en)){
-        const stomp = player.vy > 0 && (prevBottom - en.y) < 16;
-        if(stomp){
-          en.alive = false; en.squashT = 20;
-          player.vy = JUMP_V*0.55;
-          score += 200; sfx.stomp();
-          spawnParticles(en.x+en.w/2, en.y, '#ff5a5f');
-        } else if(player.invuln<=0){
-          hurtPlayer();
+    if(world==='main'){
+      for(const en of enemies){
+        if(!en.alive) continue;
+        if(aabb(player, en)){
+          const stomp = player.vy > 0 && (prevBottom - en.y) < 16;
+          if(stomp){
+            en.alive = false; en.squashT = 20;
+            player.vy = JUMP_V*0.55;
+            score += 200; sfx.stomp();
+            spawnParticles(en.x+en.w/2, en.y, '#ff5a5f');
+          } else if(player.invuln<=0){
+            hurtPlayer();
+          }
         }
       }
     }
 
     // coins
-    for(const c of coins){
+    for(const c of currentCoins()){
       if(!c.taken && aabb(player, c)){
         c.taken = true; coinCount++; score += 100; sfx.coin();
       }
     }
 
     // flag
-    if(state==='playing' && player.x + player.w >= flag.x){
+    if(world==='main' && state==='playing' && player.x + player.w >= flag.x){
       state = 'sliding';
       player.sliding = true;
       player.x = flag.x;
@@ -639,6 +699,48 @@
       player.y = Math.min(GROUND_Y - player.h, player.y + 3*dt);
       if(player.y >= GROUND_Y - player.h){
         finishWin();
+      }
+    }
+  }
+
+  function startTransition(pipe, onComplete){
+    transition = {
+      phase: 'sink', t:0, duration:34,
+      x: pipe.x + pipe.w/2 - player.w/2,
+      startY: player.y,
+      endY: pipe.y + pipe.h - 6,
+      onComplete
+    };
+    state = 'transition';
+    player.vx = 0; player.vy = 0;
+    sfx.bump();
+  }
+
+  function emergeFromPipe(pipe){
+    transition.x = pipe.x + pipe.w/2 - player.w/2;
+    player.x = transition.x;
+    player.y = pipe.y + pipe.h - 6;
+    camX = Math.max(0, Math.min(currentLevelWidth() - W, player.x - W/2 + player.w/2));
+    transition.phase = 'rise';
+    transition.t = 0;
+    transition.startY = player.y;
+    transition.endY = pipe.y - player.h;
+  }
+
+  function updateTransition(dt){
+    const tr = transition;
+    if(!tr) return;
+    tr.t += dt;
+    const p = Math.min(1, tr.t/tr.duration);
+    player.x = tr.x;
+    player.y = tr.startY + (tr.endY - tr.startY)*p;
+    if(p>=1){
+      if(tr.phase==='sink'){
+        tr.onComplete();
+      } else {
+        player.vy = 0; player.onGround = true;
+        state = 'playing';
+        transition = null;
       }
     }
   }
@@ -701,6 +803,7 @@
   }
 
   function updateEnemies(dt){
+    if(world!=='main') return;
     for(const en of enemies){
       if(!en.alive){
         if(en.squashT>0) en.squashT -= dt;
@@ -1008,7 +1111,7 @@
     for(let i=0;i<5;i++) ctx.fillRect(x-24+i*10, GROUND_Y-32, 6, 8);
   }
 
-  function draw(){
+  function drawOverworld(){
     ctx.fillStyle = skyGrad();
     ctx.fillRect(0,0,W,H);
 
@@ -1025,6 +1128,50 @@
     for(const en of enemies) drawEnemy(en);
     drawHero();
 
+    // pit warning stripes at gap edges (subtle depth)
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    for(const s of groundSegments){
+      const rightEdge = s.x + s.w - camX;
+      if(rightEdge>-4 && rightEdge<W+4) ctx.fillRect(rightEdge-3, GROUND_Y, 3, H-GROUND_Y);
+      const leftEdge = s.x - camX;
+      if(leftEdge>-4 && leftEdge<W+4) ctx.fillRect(leftEdge, GROUND_Y, 3, H-GROUND_Y);
+    }
+  }
+
+  function drawUnderground(){
+    ctx.fillStyle = '#02040f';
+    ctx.fillRect(0,0,W,H);
+
+    // ceiling trim (tiled brick band)
+    const ceilOffset = ((-camX)%32+32)%32;
+    for(let x=ceilOffset-32; x<W; x+=32){
+      ctx.fillStyle = '#0a3d91';
+      ctx.fillRect(x, UNDER_CEIL_Y-16, 30, 16);
+      ctx.strokeStyle = '#062a66'; ctx.lineWidth=2;
+      ctx.strokeRect(x+1, UNDER_CEIL_Y-15, 28, 14);
+    }
+
+    for(const s of underSolids){
+      if(s.type!=='ground') continue;
+      const x = s.x-camX;
+      ctx.fillStyle = '#123a7a';
+      ctx.fillRect(x, s.y, s.w, s.h);
+      ctx.fillStyle = '#0a2a5c';
+      for(let i=0;i<s.w;i+=32){ ctx.fillRect(x+i, s.y, 2, s.h); }
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(x, s.y, s.w, 3);
+    }
+
+    drawPipe(underEntryPipe);
+    drawPipe(underExitPipe);
+    for(const c of underCoins) drawCoin(c);
+    drawHero();
+  }
+
+  function draw(){
+    if(world==='under') drawUnderground();
+    else drawOverworld();
+
     // particles
     for(const p of particles){
       ctx.fillStyle = p.color;
@@ -1038,15 +1185,6 @@
       ctx.fillStyle = '#ffd34d';
       ctx.beginPath(); ctx.arc(c.x-camX,c.y,7,0,Math.PI*2); ctx.fill();
       ctx.restore();
-    }
-
-    // pit warning stripes at gap edges (subtle depth)
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    for(const s of groundSegments){
-      const rightEdge = s.x + s.w - camX;
-      if(rightEdge>-4 && rightEdge<W+4) ctx.fillRect(rightEdge-3, GROUND_Y, 3, H-GROUND_Y);
-      const leftEdge = s.x - camX;
-      if(leftEdge>-4 && leftEdge<W+4) ctx.fillRect(leftEdge, GROUND_Y, 3, H-GROUND_Y);
     }
   }
 
@@ -1072,6 +1210,8 @@
       updateEnemies(dt);
       updateBlocks(dt);
       updateParticles(dt);
+    } else if(state==='transition'){
+      updateTransition(dt);
     }
     draw();
     updateHud();
