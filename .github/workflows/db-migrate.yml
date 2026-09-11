@@ -15,5 +15,9 @@ jobs:
 
       - name: Apply migration
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0001_highscores.sql
+          PGHOST: ${{ secrets.SUPABASE_DB_HOST }}
+          PGPORT: ${{ secrets.SUPABASE_DB_PORT }}
+          PGUSER: ${{ secrets.SUPABASE_DB_USER }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGDATABASE: ${{ secrets.SUPABASE_DB_NAME }}
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/0001_highscores.sql
