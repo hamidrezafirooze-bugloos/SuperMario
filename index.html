@@ -312,6 +312,19 @@
     dead(){ [392,349,330,294,262].forEach((f,i)=>beep(f,0.25,'triangle',0.16,i*0.16)); }
   };
 
+  // ---------- voice lines (recorded audio) ----------
+  const voiceLines = {
+    start: new Audio('sounds/barou-be-salamat-pedarjan.mp3'),
+    win: new Audio('sounds/mashallah-pirmard.mp3')
+  };
+  function playVoice(key){
+    if(muted) return;
+    const a = voiceLines[key];
+    if(!a) return;
+    a.currentTime = 0;
+    a.play().catch(()=>{});
+  }
+
   // ---------- input ----------
   const keys = { left:false, right:false, jump:false };
   let jumpBuffered = false;
@@ -546,6 +559,7 @@
       player.sliding = true;
       player.x = flag.x;
       sfx.win();
+      playVoice('win');
     }
     if(state==='sliding'){
       player.vx = 0;
@@ -998,7 +1012,10 @@
     document.getElementById('winOverlay').hidden = true;
   }
 
-  document.getElementById('startBtn').addEventListener('click', startGame);
+  document.getElementById('startBtn').addEventListener('click', function(){
+    playVoice('start');
+    startGame();
+  });
   document.getElementById('retryBtn').addEventListener('click', startGame);
   document.getElementById('againBtn').addEventListener('click', startGame);
 
