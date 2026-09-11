@@ -1,4 +1,12 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="description" content="بیرد کوئست — یک بازی پلتفرمر آرکید الهام‌گرفته از کلاسیک‌های دهه هشتاد، ساخته‌شده با HTML5 Canvas.">
+<meta name="theme-color" content="#161a2e">
 <title>Beard Quest</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23161a2e'/%3E%3Ccircle cx='16' cy='14' r='8' fill='%23e3ad7d'/%3E%3Cpath d='M8 16c0-2 3-3 8-3s8 1 8 3-3 8-8 8-8-6-8-8Z' fill='%23c7cbd1'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Vazirmatn:wght@500;700;900&display=swap">
 <style>
@@ -216,29 +224,52 @@
     color:#5a5f8a;
     direction:rtl;
   }
+
+  button:focus-visible, .tbtn:focus-visible{
+    outline:3px solid var(--gold);
+    outline-offset:2px;
+  }
+  .sr-only{
+    position:absolute;
+    width:1px;height:1px;
+    padding:0;margin:-1px;
+    overflow:hidden;
+    clip:rect(0,0,0,0);
+    white-space:nowrap;
+    border:0;
+  }
 </style>
+</head>
+<body>
 
 <div class="titleblock">
-  <div class="eyebrow">WORLD 1 · 1</div>
+  <div class="eyebrow" id="hud-world-eyebrow">WORLD 1 · 1</div>
   <h1>BEARD QUEST</h1>
   <p class="subtitle">استاد ریشو باید بدون افتادن توی چاله و بدون خوردن به هیولاها، به بالای پرچم برسد.</p>
 </div>
 
 <div class="arcade">
-  <div class="hud">
+  <div class="hud" role="group" aria-label="وضعیت بازی">
     <div class="stat"><span class="label">امتیاز</span><span class="value" id="hud-score">000000</span></div>
+    <div class="stat"><span class="label">بهترین</span><span class="value" id="hud-best">000000</span></div>
     <div class="stat"><span class="label">سکه</span><span class="value" id="hud-coins">×00</span></div>
     <div class="lives"><span class="label" style="color:var(--gold)">جان</span><span id="hud-lives"></span></div>
-    <div class="stat"><span class="label">دنیا</span><span class="value">1-1</span></div>
-    <button class="mute" id="muteBtn">🔊 صدا</button>
+    <div class="stat"><span class="label">دنیا</span><span class="value" id="hud-world">1-1</span></div>
+    <button class="mute" id="pauseBtn" aria-label="توقف بازی">⏸ توقف</button>
+    <button class="mute" id="muteBtn" aria-pressed="false">🔊 صدا</button>
   </div>
 
+  <p class="sr-only" aria-live="polite" id="liveRegion"></p>
+
   <div class="stage">
-    <canvas id="game" width="900" height="380"></canvas>
+    <canvas id="game" width="900" height="380" aria-label="صفحه بازی بیرد کوئست" role="img">
+      مرورگر شما از تگ canvas پشتیبانی نمی‌کند؛ برای بازی کردن از یک مرورگر جدیدتر استفاده کنید.
+    </canvas>
 
     <div class="overlay" id="startOverlay">
       <h2>BEARD QUEST</h2>
       <p>با <b>← →</b> یا <b>A / D</b> حرکت کن، با <b>Space</b> یا <b>↑</b> بپر. روی سر هیولاها بپر تا نابودشون کنی، سکه جمع کن و به پرچم آخر برس!</p>
+      <p id="startBest" style="font-size:12px;color:var(--gold);"></p>
       <button class="btn" id="startBtn">شروع بازی ▶</button>
     </div>
 
@@ -249,9 +280,15 @@
     </div>
 
     <div class="overlay" id="winOverlay" hidden>
-      <h2>مرحله تمام شد! 🏁</h2>
+      <h2 id="winTitle">مرحله تمام شد! 🏁</h2>
       <p id="winScore"></p>
       <button class="btn" id="againBtn">دوباره بازی کن ↺</button>
+    </div>
+
+    <div class="overlay" id="pauseOverlay" hidden>
+      <h2>مکث ⏸</h2>
+      <p>بازی متوقف شده است.</p>
+      <button class="btn" id="resumeBtn">ادامه بازی ▶</button>
     </div>
   </div>
 </div>
@@ -260,12 +297,13 @@
   <div class="hint">
     <div><kbd>←</kbd><kbd>→</kbd> یا <kbd>A</kbd><kbd>D</kbd> — حرکت</div>
     <div><kbd>Space</kbd> یا <kbd>↑</kbd> — پرش (نگه دار برای پرش بلندتر)</div>
+    <div><kbd>P</kbd> یا <kbd>Esc</kbd> — مکث</div>
     <div>روی هیولا بپر تا شکستش بدی؛ توی چاله نیفت!</div>
   </div>
   <div class="touch" id="touchControls">
-    <div class="tbtn" id="btnLeft">◀</div>
-    <div class="tbtn" id="btnRight">▶</div>
-    <div class="tbtn" id="btnJump">⤒</div>
+    <div class="tbtn" id="btnLeft" role="button" tabindex="0" aria-label="حرکت به چپ">◀</div>
+    <div class="tbtn" id="btnRight" role="button" tabindex="0" aria-label="حرکت به راست">▶</div>
+    <div class="tbtn" id="btnJump" role="button" tabindex="0" aria-label="پرش">⤒</div>
   </div>
 </div>
 
@@ -280,9 +318,14 @@
   const GROUND_Y = 300;
   const TILE = 32;
 
+  // ---------- persistence ----------
+  const BEST_KEY = 'beardquest_best_score';
+  const MUTE_KEY = 'beardquest_muted';
+  let bestScore = Number(localStorage.getItem(BEST_KEY)) || 0;
+
   // ---------- audio (WebAudio, no assets) ----------
   let audioCtx = null;
-  let muted = false;
+  let muted = localStorage.getItem(MUTE_KEY) === '1';
   function ensureAudio(){
     if(!audioCtx){
       try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
@@ -309,8 +352,28 @@
     bump(){ beep(140,0.08,'square',0.12); },
     hurt(){ beep(220,0.3,'sawtooth',0.16); beep(140,0.35,'sawtooth',0.14,0.05); },
     win(){ [523,659,784,1046].forEach((f,i)=>beep(f,0.22,'square',0.15,i*0.14)); },
+    gameClear(){ [523,659,784,1046,1318,1046,1318,1568].forEach((f,i)=>beep(f,0.24,'square',0.16,i*0.13)); },
     dead(){ [392,349,330,294,262].forEach((f,i)=>beep(f,0.25,'triangle',0.16,i*0.16)); }
   };
+
+  // ---------- background music (procedural loop, no assets) ----------
+  const MUSIC_NOTES = [130.81,164.81,196.00,164.81, 146.83,174.61,220.00,174.61];
+  let musicTimer = null, musicStep = 0;
+  function musicTick(){
+    beep(MUSIC_NOTES[musicStep % MUSIC_NOTES.length], 0.16, 'triangle', 0.045);
+    musicStep++;
+  }
+  function startMusic(){
+    if(musicTimer) return;
+    musicTimer = setInterval(musicTick, 230);
+  }
+  function stopMusic(){
+    if(musicTimer){ clearInterval(musicTimer); musicTimer = null; }
+  }
+
+  // ---------- accessibility: live region for screen readers ----------
+  const liveRegion = document.getElementById('liveRegion');
+  function announce(text){ if(liveRegion) liveRegion.textContent = text; }
 
   // ---------- input ----------
   const keys = { left:false, right:false, jump:false };
@@ -319,6 +382,7 @@
     if(['ArrowLeft','KeyA'].includes(e.code)) keys.left = true;
     if(['ArrowRight','KeyD'].includes(e.code)) keys.right = true;
     if(['Space','ArrowUp','KeyW'].includes(e.code)){ if(!keys.jump) jumpBuffered = true; keys.jump = true; e.preventDefault(); }
+    if(e.code==='Escape' || e.code==='KeyP'){ togglePause(); }
     if(['ArrowLeft','ArrowRight','ArrowUp','Space'].includes(e.code)) e.preventDefault();
   }, {passive:false});
   window.addEventListener('keyup', e=>{
@@ -334,53 +398,54 @@
     el.addEventListener('pointerup', up);
     el.addEventListener('pointerleave', up);
     el.addEventListener('pointercancel', up);
+    // keyboard activation, since these on-screen buttons are focusable (role="button")
+    el.addEventListener('keydown', e=>{
+      if(e.code==='Enter' || e.code==='Space'){ e.preventDefault(); if(!e.repeat){ onDown(); ensureAudio(); } }
+    });
+    el.addEventListener('keyup', e=>{
+      if(e.code==='Enter' || e.code==='Space'){ e.preventDefault(); onUp(); }
+    });
   }
   bindTouch('btnLeft', ()=>keys.left=true, ()=>keys.left=false);
   bindTouch('btnRight', ()=>keys.right=true, ()=>keys.right=false);
   bindTouch('btnJump', ()=>{ if(!keys.jump) jumpBuffered = true; keys.jump = true; }, ()=>keys.jump=false);
 
-  document.getElementById('muteBtn').addEventListener('click', function(){
+  const muteBtnEl = document.getElementById('muteBtn');
+  muteBtnEl.textContent = muted ? '🔇 صدا' : '🔊 صدا';
+  muteBtnEl.classList.toggle('on', !muted);
+  muteBtnEl.setAttribute('aria-pressed', String(muted));
+  muteBtnEl.addEventListener('click', function(){
     muted = !muted;
+    localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
     this.textContent = muted ? '🔇 صدا' : '🔊 صدا';
     this.classList.toggle('on', !muted);
+    this.setAttribute('aria-pressed', String(muted));
   });
 
-  // ---------- level data ----------
-  // Layout rhythm (pipe pairs, block clusters, the mid pit, the closing
-  // staircase pyramid before the flag) follows the classic World 1-1 map,
-  // redrawn here with original programmer art rather than any copyrighted tiles.
-  // ground segments: [x, width] on the GROUND_Y line, with a pit gap
-  const groundSegments = [
-    {x:0, w:1180},
-    {x:1300, w:2600}
-  ];
-  const LEVEL_W = 3940;
-
-  function solidsFromGround(){
-    return groundSegments.map(s=>({x:s.x,y:GROUND_Y,w:s.w,h:H-GROUND_Y,type:'ground'}));
+  function togglePause(){
+    if(state!=='playing' && state!=='sliding') return;
+    paused = !paused;
+    if(paused){
+      keys.left=false; keys.right=false; keys.jump=false; jumpBuffered=false;
+      stopMusic();
+      document.getElementById('pauseOverlay').hidden = false;
+      document.getElementById('pauseBtn').textContent = '▶ ادامه';
+      announce('بازی متوقف شد');
+    } else {
+      document.getElementById('pauseOverlay').hidden = true;
+      document.getElementById('pauseBtn').textContent = '⏸ توقف';
+      startMusic();
+      announce('ادامه بازی');
+    }
   }
+  document.getElementById('pauseBtn').addEventListener('click', togglePause);
+  document.getElementById('resumeBtn').addEventListener('click', togglePause);
 
-  const pipes = [
-    {x:340,w:70,h:64}, {x:640,w:70,h:80}, {x:900,w:70,h:96},
-    {x:2080,w:70,h:64}, {x:3660,w:70,h:64}
-  ].map(p=>({x:p.x,y:GROUND_Y-p.h,w:p.w,h:p.h,type:'pipe'}));
-
-  const blocks = [
-    {x:520,y:170,type:'question',used:false},
-    {x:1420,y:170,type:'brick'},
-    {x:1452,y:170,type:'question',used:false},
-    {x:1484,y:170,type:'brick'},
-    {x:1516,y:170,type:'brick'},
-    {x:1560,y:200,type:'question',used:false},
-    {x:1900,y:170,type:'question',used:false},
-    {x:2260,y:170,type:'brick'},
-    {x:2292,y:170,type:'question',used:false},
-    {x:2600,y:210,type:'brick'},
-    {x:2632,y:210,type:'question',used:false},
-    {x:2664,y:210,type:'brick'},
-  ].map(b=>({...b, w:32, h:32, bump:0}));
-
-  // closing staircase pyramid, the signature run-up to the flagpole
+  // ---------- level data ----------
+  // Layout rhythm (pipe pairs, block clusters, mid pits, the closing
+  // staircase pyramid before the flag) follows the classic World-1 map
+  // rhythm, redrawn here with original programmer art rather than any
+  // copyrighted tiles. Two stages ("1-1" and "1-2") give the run some depth.
   const STAIR_TILE = 32;
   function buildPyramid(x0, steps, tile){
     const arr = [];
@@ -393,31 +458,127 @@
     }
     return arr;
   }
-  const stairs = buildPyramid(3340, 4, STAIR_TILE);
+  function mapPipes(list){ return list.map(p=>({x:p.x,y:GROUND_Y-p.h,w:p.w,h:p.h,type:'pipe'})); }
+  function mapBlocks(list){ return list.map(b=>({...b, w:32, h:32, bump:0})); }
+  function mapCoins(list){ return list.map(c=>({...c, w:18, h:18, taken:false, bob:Math.random()*10})); }
+  function mapEnemies(list){
+    return list.map(e=>({x:e.x, min:e.min, max:e.max, y:GROUND_Y-28, w:30, h:28, dir:-1, speed:e.speed||1.1, alive:true, squashT:0, kind:e.kind||'goomba'}));
+  }
+  function makeParallax(levelW){
+    const clouds = [];
+    for(let i=0;i<14;i++) clouds.push({x:Math.random()*levelW, y:40+Math.random()*90, s:0.7+Math.random()*0.8});
+    const hills = [];
+    const hillCount = Math.max(6, Math.round(levelW/420));
+    for(let i=0;i<hillCount;i++) hills.push({x:i*420+Math.random()*80, s:0.8+Math.random()*0.6});
+    const bushes = [];
+    const bushCount = Math.max(10, Math.round(levelW/260));
+    for(let i=0;i<bushCount;i++) bushes.push({x:Math.random()*levelW, s:0.8+Math.random()*0.7});
+    return {clouds, hills, bushes};
+  }
 
-  const coins = [
-    {x:1220,y:230},{x:1260,y:200},{x:1360,y:180},{x:1410,y:230},
-    {x:1900,y:130},{x:2900,y:230},{x:2940,y:200},{x:2980,y:230},
-    {x:200,y:220},{x:240,y:220},
-    {x:3400,y:GROUND_Y-64},{x:3568,y:GROUND_Y-160},
-  ].map(c=>({...c, w:18, h:18, taken:false, bob:Math.random()*10}));
+  function makeLevel1(){
+    const groundSegments = [ {x:0, w:1180}, {x:1300, w:2600} ];
+    const LEVEL_W = 3940;
+    const pipes = mapPipes([
+      {x:340,w:70,h:64}, {x:640,w:70,h:80}, {x:900,w:70,h:96},
+      {x:2080,w:70,h:64}, {x:3660,w:70,h:64}
+    ]);
+    const blocks = mapBlocks([
+      {x:520,y:170,type:'question',used:false},
+      {x:1420,y:170,type:'brick'},
+      {x:1452,y:170,type:'question',used:false},
+      {x:1484,y:170,type:'brick'},
+      {x:1516,y:170,type:'brick'},
+      {x:1560,y:200,type:'question',used:false},
+      {x:1900,y:170,type:'question',used:false},
+      {x:2260,y:170,type:'brick'},
+      {x:2292,y:170,type:'question',used:false},
+      {x:2600,y:210,type:'brick'},
+      {x:2632,y:210,type:'question',used:false},
+      {x:2664,y:210,type:'brick'},
+    ]);
+    const stairs = buildPyramid(3340, 4, STAIR_TILE);
+    const coins = mapCoins([
+      {x:1220,y:230},{x:1260,y:200},{x:1360,y:180},{x:1410,y:230},
+      {x:1900,y:130},{x:2900,y:230},{x:2940,y:200},{x:2980,y:230},
+      {x:200,y:220},{x:240,y:220},
+      {x:3400,y:GROUND_Y-64},{x:3568,y:GROUND_Y-160},
+    ]);
+    const enemies = mapEnemies([
+      {x:520, min:420, max:1120},
+      {x:1700, min:1360, max:2260},
+      {x:2450, min:1360, max:2960},
+      {x:3120, min:3000, max:3300},
+    ]);
+    const flag = {x:3860, y:70, h:GROUND_Y-70};
+    return {groundSegments, LEVEL_W, pipes, blocks, stairs, coins, enemies, flag, ...makeParallax(LEVEL_W)};
+  }
 
-  const enemies = [
-    {x:520, min:420, max:1120},
-    {x:1700, min:1360, max:2260},
-    {x:2450, min:1360, max:2960},
-    {x:3120, min:3000, max:3300},
-  ].map(e=>({x:e.x, min:e.min, max:e.max, y:GROUND_Y-28, w:30, h:28, dir:-1, speed:1.1, alive:true, squashT:0}));
+  function makeLevel2(){
+    // longer stage, two pits, and the spiny "spike" enemy that can't be stomped
+    const groundSegments = [ {x:0, w:1000}, {x:1120, w:900}, {x:2140, w:2540} ];
+    const LEVEL_W = 4680;
+    const pipes = mapPipes([
+      {x:250,w:70,h:64}, {x:650,w:70,h:80},
+      {x:1300,w:70,h:64}, {x:1650,w:70,h:96},
+      {x:3300,w:70,h:64}, {x:3900,w:70,h:64}
+    ]);
+    const blocks = mapBlocks([
+      {x:450,y:170,type:'question',used:false},
+      {x:800,y:170,type:'brick'},
+      {x:832,y:170,type:'question',used:false},
+      {x:864,y:170,type:'brick'},
+      {x:1450,y:170,type:'brick'},
+      {x:1482,y:170,type:'question',used:false},
+      {x:1514,y:170,type:'brick'},
+      {x:1850,y:200,type:'question',used:false},
+      {x:2550,y:170,type:'question',used:false},
+      {x:2582,y:170,type:'brick'},
+      {x:3500,y:210,type:'brick'},
+      {x:3532,y:210,type:'question',used:false},
+      {x:3564,y:210,type:'brick'},
+    ]);
+    const stairs = buildPyramid(4260, 5, STAIR_TILE);
+    const coins = mapCoins([
+      {x:150,y:220},{x:190,y:220},
+      {x:1030,y:230},{x:1070,y:200},
+      {x:1400,y:180},{x:1500,y:150},{x:1700,y:230},
+      {x:2050,y:220},{x:2090,y:190},
+      {x:2600,y:230},{x:2640,y:200},{x:2680,y:230},
+      {x:3600,y:GROUND_Y-64},{x:3750,y:GROUND_Y-160},
+    ]);
+    const enemies = mapEnemies([
+      {x:450, min:350, max:950},
+      {x:1450, min:1150, max:1700, kind:'spike'},
+      {x:1800, min:1700, max:2000},
+      {x:2500, min:2160, max:2750},
+      {x:3000, min:2800, max:3300, kind:'spike'},
+      {x:3800, min:3350, max:4200},
+    ]);
+    const flag = {x:4600, y:70, h:GROUND_Y-70};
+    return {groundSegments, LEVEL_W, pipes, blocks, stairs, coins, enemies, flag, ...makeParallax(LEVEL_W)};
+  }
 
-  const flag = {x:3860, y:70, h:GROUND_Y-70};
+  const LEVELS = [makeLevel1, makeLevel2];
+  let levelIndex = 0;
+  let groundSegments, LEVEL_W, pipes, blocks, stairs, coins, enemies, flag, clouds, hills, bushes;
 
-  // ---------- clouds / hills (parallax) ----------
-  const clouds = [];
-  for(let i=0;i<14;i++) clouds.push({x:Math.random()*LEVEL_W, y:40+Math.random()*90, s:0.7+Math.random()*0.8});
-  const hills = [];
-  for(let i=0;i<10;i++) hills.push({x:i*420+Math.random()*80, s:0.8+Math.random()*0.6});
-  const bushes = [];
-  for(let i=0;i<16;i++) bushes.push({x:Math.random()*LEVEL_W, s:0.8+Math.random()*0.7});
+  function solidsFromGround(){
+    return groundSegments.map(s=>({x:s.x,y:GROUND_Y,w:s.w,h:H-GROUND_Y,type:'ground'}));
+  }
+
+  function loadLevel(idx){
+    levelIndex = idx;
+    const def = LEVELS[idx]();
+    groundSegments = def.groundSegments; LEVEL_W = def.LEVEL_W;
+    pipes = def.pipes; blocks = def.blocks; stairs = def.stairs;
+    coins = def.coins; enemies = def.enemies; flag = def.flag;
+    clouds = def.clouds; hills = def.hills; bushes = def.bushes;
+    camX = 0; particles = []; flyCoins = [];
+    resetPlayer();
+    document.getElementById('hud-world').textContent = '1-' + (idx+1);
+    document.getElementById('hud-world-eyebrow').textContent = 'WORLD 1 · ' + (idx+1);
+  }
 
   // ---------- player ----------
   const GRAVITY = 0.62, MAX_FALL = 15, MOVE_ACCEL = 0.55, MAX_SPEED = 4.4, FRICTION = 0.72, JUMP_V = -12.4, JUMP_CUT = 0.5;
@@ -425,22 +586,17 @@
 
   let camX = 0;
   let score = 0, coinCount = 0, lives = 3;
-  let state = 'ready'; // ready | playing | dead | win | sliding
+  let state = 'ready'; // ready | playing | sliding | levelclear | dead | win
+  let paused = false;
+  let awaitingNextLevel = false;
   let particles = [];
   let flyCoins = [];
 
   function resetPlayer(){
     player.x = 60; player.y = GROUND_Y - player.h - 1; player.vx=0; player.vy=0; player.onGround=false; player.invuln=90; player.alive=true;
   }
-  function resetLevel(){
-    blocks.forEach(b=>{b.used=false; b.bump=0;});
-    coins.forEach(c=>c.taken=false);
-    enemies.forEach(e=>{e.alive=true; e.dir=-1; e.squashT=0;});
-    score=0; coinCount=0; lives=3;
-    particles=[]; flyCoins=[];
-    resetPlayer();
-  }
-  resetLevel();
+  loadLevel(0);
+  document.getElementById('startBest').textContent = bestScore>0 ? ('بهترین امتیاز: ' + bestScore) : '';
 
   function allSolids(){ return solidsFromGround().concat(pipes, blocks, stairs); }
 
@@ -521,7 +677,7 @@
     for(const en of enemies){
       if(!en.alive) continue;
       if(aabb(player, en)){
-        const stomp = player.vy > 0 && (prevBottom - en.y) < 16;
+        const stomp = en.kind !== 'spike' && player.vy > 0 && (prevBottom - en.y) < 16;
         if(stomp){
           en.alive = false; en.squashT = 20;
           player.vy = JUMP_V*0.55;
@@ -575,9 +731,17 @@
     }
   }
 
+  function saveBestScore(){
+    if(score > bestScore){
+      bestScore = score;
+      localStorage.setItem(BEST_KEY, String(bestScore));
+    }
+  }
+
   function hurtPlayer(){
     lives -= 1;
     sfx.hurt();
+    announce('یک جان از دست دادی. جان باقیمانده: ' + Math.max(0,lives));
     if(lives<=0){
       killPlayer();
     } else {
@@ -591,24 +755,46 @@
     if(!player.alive) return;
     player.alive = false;
     sfx.dead();
+    stopMusic();
     setTimeout(()=>{
       lives -= 1;
       if(lives>0){
         resetPlayer();
         player.alive = true;
         state = 'playing';
+        startMusic();
       } else {
         state = 'dead';
+        saveBestScore();
         document.getElementById('loseScore').textContent = 'امتیاز نهایی: ' + score;
         document.getElementById('loseOverlay').hidden = false;
+        announce('باختی. امتیاز نهایی ' + score);
       }
     }, 700);
   }
 
   function finishWin(){
-    state = 'win';
-    document.getElementById('winScore').textContent = 'امتیاز: ' + score + '  |  سکه: ' + coinCount;
-    document.getElementById('winOverlay').hidden = false;
+    stopMusic();
+    if(levelIndex + 1 < LEVELS.length){
+      awaitingNextLevel = true;
+      state = 'levelclear';
+      sfx.win();
+      document.getElementById('winTitle').textContent = 'مرحله ۱-' + (levelIndex+1) + ' تمام شد! 🏁';
+      document.getElementById('winScore').textContent = 'امتیاز: ' + score + '  |  سکه: ' + coinCount;
+      document.getElementById('againBtn').textContent = 'ادامه به مرحله بعد ▶';
+      document.getElementById('winOverlay').hidden = false;
+      announce('مرحله تمام شد. امتیاز ' + score);
+    } else {
+      awaitingNextLevel = false;
+      state = 'win';
+      sfx.gameClear();
+      saveBestScore();
+      document.getElementById('winTitle').textContent = 'بازی تمام شد! 🏆';
+      document.getElementById('winScore').textContent = 'امتیاز نهایی: ' + score + '  |  سکه: ' + coinCount + '  |  بهترین: ' + bestScore;
+      document.getElementById('againBtn').textContent = 'دوباره بازی کن ↺';
+      document.getElementById('winOverlay').hidden = false;
+      announce('بازی تمام شد! امتیاز نهایی ' + score);
+    }
   }
 
   function updateEnemies(dt){
@@ -763,21 +949,34 @@
       ctx.translate(x,0);
     }
     const by = en.y;
-    ctx.fillStyle = '#a0522d';
+    const isSpike = en.kind === 'spike';
+    ctx.fillStyle = isSpike ? '#5a5f6e' : '#a0522d';
     ctx.beginPath();
     ctx.ellipse(x+en.w/2, by+en.h*0.55, en.w/2, en.h*0.45,0,0,Math.PI*2);
     ctx.fill();
-    ctx.fillStyle = '#6b3418';
+    ctx.fillStyle = isSpike ? '#3a3e4a' : '#6b3418';
     ctx.fillRect(x+3, by+en.h-8, en.w-6, 8);
     ctx.fillStyle='#fff';
     ctx.beginPath(); ctx.ellipse(x+en.w*0.32, by+en.h*0.45,4,5,0,0,Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.ellipse(x+en.w*0.68, by+en.h*0.45,4,5,0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#1a1a1a';
+    ctx.fillStyle= isSpike ? '#b33' : '#1a1a1a';
     ctx.beginPath(); ctx.arc(x+en.w*0.32, by+en.h*0.47,2,0,Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(x+en.w*0.68, by+en.h*0.47,2,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#4a2410';
-    ctx.fillRect(x+en.w*0.18, by+en.h*0.22, en.w*0.22, 4);
-    ctx.fillRect(x+en.w*0.60, by+en.h*0.22, en.w*0.22, 4);
+    if(isSpike){
+      ctx.fillStyle = '#c9cdd6';
+      for(let i=0;i<3;i++){
+        const sx = x+en.w*0.18+i*en.w*0.3;
+        ctx.beginPath();
+        ctx.moveTo(sx, by+en.h*0.2);
+        ctx.lineTo(sx+6, by+en.h*0.2);
+        ctx.lineTo(sx+3, by-6);
+        ctx.closePath(); ctx.fill();
+      }
+    } else {
+      ctx.fillStyle='#4a2410';
+      ctx.fillRect(x+en.w*0.18, by+en.h*0.22, en.w*0.22, 4);
+      ctx.fillRect(x+en.w*0.60, by+en.h*0.22, en.w*0.22, 4);
+    }
     ctx.restore();
   }
 
@@ -963,6 +1162,7 @@
 
   function updateHud(){
     document.getElementById('hud-score').textContent = String(score).padStart(6,'0');
+    document.getElementById('hud-best').textContent = String(bestScore).padStart(6,'0');
     document.getElementById('hud-coins').textContent = '×' + String(coinCount).padStart(2,'0');
     const livesEl = document.getElementById('hud-lives');
     livesEl.innerHTML = '';
@@ -978,7 +1178,7 @@
   function loop(t){
     const dt = Math.max(0, Math.min(2.2, (t-lastT)/16.67));
     lastT = t;
-    if(state==='playing' || state==='sliding'){
+    if((state==='playing' || state==='sliding') && !paused){
       updatePlayer(dt);
       updateEnemies(dt);
       updateBlocks(dt);
@@ -991,20 +1191,40 @@
 
   function startGame(){
     ensureAudio();
-    resetLevel();
+    score=0; coinCount=0; lives=3;
+    paused = false;
+    awaitingNextLevel = false;
+    loadLevel(0);
     state = 'playing';
     document.getElementById('startOverlay').hidden = true;
     document.getElementById('loseOverlay').hidden = true;
     document.getElementById('winOverlay').hidden = true;
+    document.getElementById('pauseOverlay').hidden = true;
+    document.getElementById('pauseBtn').textContent = '⏸ توقف';
+    startMusic();
+    announce('بازی شروع شد');
+  }
+
+  function nextLevel(){
+    ensureAudio();
+    loadLevel(levelIndex+1);
+    state = 'playing';
+    document.getElementById('winOverlay').hidden = true;
+    startMusic();
+    announce('مرحله ۱-' + (levelIndex+1) + ' شروع شد');
   }
 
   document.getElementById('startBtn').addEventListener('click', startGame);
   document.getElementById('retryBtn').addEventListener('click', startGame);
-  document.getElementById('againBtn').addEventListener('click', startGame);
+  document.getElementById('againBtn').addEventListener('click', function(){
+    document.getElementById('winOverlay').hidden = true;
+    if(awaitingNextLevel){ nextLevel(); } else { startGame(); }
+  });
 
   updateHud();
   draw();
   requestAnimationFrame(loop);
 })();
 </script>
-<!-- verified: direct-commit auto-deploy test -->
+</body>
+</html>
